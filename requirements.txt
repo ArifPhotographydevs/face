@@ -1,0 +1,7 @@
+flask
+flask-cors
+boto3
+face_recognition
+pillow
+botocore
+gunicorn

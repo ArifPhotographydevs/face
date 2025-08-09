@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Image Matcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .image-preview { max-width: 300px; max-height: 300px; }
+        .matched-image { max-width: 200px; max-height: 200px; margin: 10px; border-radius: 8px; box-shadow: 0 1px 4px #0001;}
+        #errorDetails { white-space: pre-wrap; font-family: monospace; }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl">
+        <h1 class="text-2xl font-bold mb-4 text-center">Face Recognition Image Matcher</h1>
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Name</label>
+            <input type="text" id="nameInput" class="mt-1 block w-full border rounded p-2">
+            <label class="block text-sm font-medium text-gray-700 mt-3">Email</label>
+            <input type="email" id="emailInput" class="mt-1 block w-full border rounded p-2">
+            <label class="block text-sm font-medium text-gray-700 mt-3">Phone Number</label>
+            <input type="tel" id="phoneInput" class="mt-1 block w-full border rounded p-2">
+            <label class="block text-sm font-medium text-gray-700 mt-3">Upload Selfie</label>
+            <input type="file" id="selfieInput" accept="image/*" class="mt-1 block w-full">
+            <img id="preview" class="image-preview mt-2 hidden" alt="Image Preview">
+        </div>
+        <button id="submitBtn" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+            Find Matches
+        </button>
+        <div id="loadingSpinner" class="flex flex-col items-center justify-center my-4 hidden">
+            <svg class="animate-spin h-8 w-8 text-blue-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+            <span class="text-blue-500 text-lg font-medium">Processing, please wait...</span>
+        </div>
+        <div id="results" class="mt-6 hidden">
+            <h2 class="text-xl font-semibold mb-2">Matched Images</h2>
+            <p id="message" class="mb-4"></p>
+            <p id="shareUrl" class="mb-4"></p>
+            <div id="matchedImages" class="flex flex-wrap"></div>
+        </div>
+        <div id="error" class="mt-4 text-red-500 hidden"></div>
+        <div id="errorDetails" class="mt-2 text-sm text-gray-600 hidden"></div>
+    </div>
+    <script>
+        const nameInput = document.getElementById('nameInput');
+        const emailInput = document.getElementById('emailInput');
+        const phoneInput = document.getElementById('phoneInput');
+        const selfieInput = document.getElementById('selfieInput');
+        const preview = document.getElementById('preview');
+        const submitBtn = document.getElementById('submitBtn');
+        const results = document.getElementById('results');
+        const message = document.getElementById('message');
+        const shareUrl = document.getElementById('shareUrl');
+        const matchedImages = document.getElementById('matchedImages');
+        const errorDiv = document.getElementById('error');
+        const errorDetails = document.getElementById('errorDetails');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+
+        selfieInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                preview.src = URL.createObjectURL(file);
+                preview.classList.remove('hidden');
+            }
+        });
+
+        submitBtn.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
+            const phone = phoneInput.value.trim();
+            const file = selfieInput.files[0];
+
+            if (!name || !email || !phone || !file) {
+                errorDiv.textContent = 'Please fill all fields and select an image';
+                errorDiv.classList.remove('hidden');
+                errorDetails.classList.add('hidden');
+                return;
+            }
+            errorDiv.classList.add('hidden');
+            errorDetails.classList.add('hidden');
+            results.classList.add('hidden');
+            matchedImages.innerHTML = '';
+            submitBtn.disabled = true;
+            loadingSpinner.classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const base64Image = reader.result.split(',')[1];
+                let rawResponse = '';
+                try {
+                    const response = await fetch('http://localhost:5000/match', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: name,
+                            email: email,
+                            phone: phone,
+                            selfie: base64Image
+                        })
+                    });
+                    rawResponse = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(rawResponse);
+                    } catch (jsonError) {
+                        loadingSpinner.classList.add('hidden');
+                        submitBtn.disabled = false;
+                        throw new Error(`Invalid JSON response: ${jsonError.message}\nRaw Response: ${rawResponse}`);
+                    }
+                    let body;
+                    try {
+                        body = typeof data.body === 'string' ? JSON.parse(data.body) : data;
+                    } catch (bodyError) {
+                        loadingSpinner.classList.add('hidden');
+                        submitBtn.disabled = false;
+                        throw new Error(`Failed to parse response body: ${bodyError.message}\nRaw Response: ${rawResponse}`);
+                    }
+                    if (response.ok && body.success) {
+                        message.textContent = body.message;
+                        shareUrl.innerHTML = body.shared_url ?
+                            `Shared URL: <a href="${body.shared_url}" target="_blank" class="text-blue-500">${body.shared_url}</a>`
+                            : 'No shared URL available';
+                        matchedImages.innerHTML = '';
+                        if (body.matched_images && body.matched_images.length > 0) {
+                            body.matched_images.forEach(img => {
+                                const container = document.createElement('div');
+                                container.className = 'flex flex-col items-center mr-4 mb-4';
+                                const imgElement = document.createElement('img');
+                                imgElement.src = `data:image/jpeg;base64,${img.image}`;
+                                imgElement.className = 'matched-image';
+                                imgElement.alt = img.key;
+                                const caption = document.createElement('div');
+                                caption.className = 'text-xs mt-1 break-words text-gray-600 text-center max-w-xs';
+                                caption.textContent = img.key;
+                                container.appendChild(imgElement);
+                                container.appendChild(caption);
+                                matchedImages.appendChild(container);
+                            });
+                        } else {
+                            message.textContent += ' - No images matched.';
+                        }
+                        results.classList.remove('hidden');
+                    } else {
+                        errorDiv.textContent = body.message || 'Unknown error from server';
+                        errorDetails.textContent = `HTTP Status: ${response.status}\nError: ${body.error || 'No error details'}\nRaw Response: ${rawResponse}`;
+                        errorDiv.classList.remove('hidden');
+                        errorDetails.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    const errorMessage = error && typeof error === 'object' && error.message ? error.message : 'Unknown error occurred';
+                    errorDiv.textContent = 'Error connecting to server or processing issue';
+                    errorDetails.textContent = `Message: ${errorMessage}\nRaw Response: ${rawResponse || 'No response received'}`;
+                    errorDiv.classList.remove('hidden');
+                    errorDetails.classList.remove('hidden');
+                    console.error('Error:', error);
+                } finally {
+                    loadingSpinner.classList.add('hidden');
+                    submitBtn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+</body>
+</html>
