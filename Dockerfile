@@ -1,35 +1,35 @@
-# ---- Base image ----
-FROM python:3.10-slim AS base
+# Use Python 3.9 (face-recognition works best here)
+FROM python:3.9-slim
 
-# System deps for dlib/face_recognition + Pillow
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential cmake \
-    libopenblas-dev liblapack-dev \
-    libjpeg-dev zlib1g-dev \
+# Install system dependencies for dlib & face-recognition
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    libgtk-3-dev \
     libboost-all-dev \
+    libatlas-base-dev \
+    liblapack-dev \
+    libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip
+RUN pip install --upgrade pip
+
+# Install dlib from prebuilt wheel (no compilation)
+RUN pip install --no-cache-dir dlib==19.24.2 --only-binary :all:
+
+# Install face-recognition and other dependencies
+RUN pip install --no-cache-dir face-recognition face-recognition-models
+
+# Copy your app files
 WORKDIR /app
+COPY . /app
 
-# Safer, smaller images: only copy what we need first for dependency layer
-COPY requirements.txt .
+# Install other requirements if you have a requirements.txt
+# RUN pip install --no-cache-dir -r requirements.txt
 
-# Upgrade pip and install wheels where possible
-RUN python -m pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Expose port if running a web app
+EXPOSE 8000
 
-# Copy app source
-COPY . .
-
-# Use a non-root user for safety
-RUN useradd -m appuser
-USER appuser
-
-# Expose the port Gunicorn will bind to
-EXPOSE 5000
-
-# Healthcheck (optional but nice in prod)
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -f http://127.0.0.1:5000/ || exit 1
-
-# Start the app with Gunicorn (4 workers, tweak as needed)
-CMD ["gunicorn", "--workers=4", "--bind=0.0.0.0:5000", "app:app"]
+# Start your app (replace with your actual start command)
+CMD ["python", "app.py"]
