@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y \
     cmake \
     libgtk-3-dev \
     libboost-all-dev \
-    libatlas-base-dev \
+    libatlas3-base \
+    libatlas-dev \
     liblapack-dev \
     libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
